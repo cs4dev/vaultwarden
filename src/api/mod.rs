@@ -1,5 +1,6 @@
 mod admin;
 pub mod core;
+mod custom;
 mod icons;
 mod identity;
 mod notifications;
@@ -20,6 +21,7 @@ pub use crate::api::{
     core::two_factor::send_incomplete_2fa_notifications,
     core::{emergency_notification_reminder_job, emergency_request_timeout_job},
     core::{event_cleanup_job, events_routes as core_events_routes},
+    custom::routes as custom_routes,
     icons::routes as icons_routes,
     identity::routes as identity_routes,
     notifications::routes as notifications_routes,

@@ -486,6 +486,8 @@ make_config! {
 
         /// HIBP Api Key |> HaveIBeenPwned API Key, request it here: https://haveibeenpwned.com/API/Key
         hibp_api_key:           Pass,   true,   option;
+        /// StrongKeep API Key |> API key for accessing StrongKeep custom endpoints
+        strongkeep_api_key:     Pass,   true,   option;
 
         /// Per-user attachment storage limit (KB) |> Max kilobytes of attachment storage allowed per user. When this limit is reached, the user will not be allowed to upload further attachments.
         user_attachment_limit:  i64,    true,   option;
@@ -1665,6 +1667,7 @@ where
     reg!("email/send_2fa_removed_from_org", ".html");
     reg!("email/send_emergency_access_invite", ".html");
     reg!("email/send_org_invite", ".html");
+    reg!("email/send_admin_invite", ".html");
     reg!("email/send_single_org_removed_from_org", ".html");
     reg!("email/smtp_test", ".html");
     reg!("email/sso_change_email", ".html");
