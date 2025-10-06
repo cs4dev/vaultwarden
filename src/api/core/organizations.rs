@@ -1362,8 +1362,8 @@ async fn accept_invite(
         accept_org_invite(&headers.user, member, reset_password_key, &mut conn).await?;
     } else if CONFIG.mail_enabled() {
         // User was invited from /admin, so they are automatically confirmed
-        let org_name = CONFIG.invitation_org_name();
-        mail::send_invite_confirmed(&claims.email, &org_name).await?;
+        // let org_name = CONFIG.invitation_org_name();
+        // mail::send_invite_confirmed(&claims.email, &org_name).await?;
     }
 
     Ok(())
