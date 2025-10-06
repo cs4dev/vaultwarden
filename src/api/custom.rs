@@ -50,8 +50,8 @@ struct InviteData {
 #[post("/invite", format = "application/json", data = "<data>")]
 async fn invite_user(_auth: AdminToken, data: Json<InviteData>, mut conn: DbConn) -> JsonResult {
     let data: InviteData = data.into_inner();
-    if User::find_by_mail(&data.email, &mut conn).await.is_some() {
-        err_code!("User already exists", Status::Conflict.code)
+    if let Some(existing_user) = User::find_by_mail(&data.email, &mut conn).await {
+        return Ok(Json(existing_user.to_json(&mut conn).await))
     }
 
     let mut user = User::new(data.email, None);
