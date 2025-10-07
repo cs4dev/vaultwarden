@@ -550,6 +550,9 @@ make_config! {
 
         /// Admin token/Argon2 PHC |> The plain text token or Argon2 PHC string used to authenticate in this very same page. Changing it here will not deauthorize the current session!
         admin_token:            Pass,   true,   option;
+        
+        /// X-Vaultwarden-API |> Authenticate via x-vaultwarden-api header.
+        x_vaultwarden_api:      Pass,   true,   option;
 
         /// Invitation organization name |> Name shown in the invitation emails that don't come from a specific organization
         invitation_org_name:    String, true,   def,    "Vaultwarden".to_string();
@@ -1132,7 +1135,7 @@ fn validate_config(cfg: &ConfigItems) -> Result<(), Error> {
     }
 
     if !cfg.disable_admin_token {
-        match cfg.admin_token.as_ref() {
+        match cfg.x_vaultwarden_api.as_ref() {
             Some(t) if t.starts_with("$argon2") => {
                 if let Err(e) = argon2::password_hash::PasswordHash::new(t) {
                     err!(format!("The configured Argon2 PHC in `ADMIN_TOKEN` is invalid: '{e}'"))
@@ -1533,7 +1536,7 @@ impl Config {
 
     /// Tests whether the admin token is set to a non-empty value.
     pub fn is_admin_token_set(&self) -> bool {
-        let token = self.admin_token();
+        let token = self.x_vaultwarden_api();
 
         token.is_some() && !token.unwrap().trim().is_empty()
     }

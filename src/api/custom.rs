@@ -11,28 +11,28 @@ use crate::{
 
 pub const FAKE_ADMIN_UUID: &str = "00000000-0000-0000-0000-000000000000";
 
-pub struct AdminToken;
+pub struct VWApi;
 
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for AdminToken {
+impl<'r> FromRequest<'r> for VWApi {
     type Error = &'static str;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let api_key = request.headers().get_one("admin_token");
+        let api_key = request.headers().get_one("x-vaultwarden-api");
         
         match api_key {
             Some(key) if !key.is_empty() => {
-                if let Some(expected_key) = CONFIG.admin_token() {
+                if let Some(expected_key) = CONFIG.x_vaultwarden_api() {
                     if key == expected_key {
-                        Outcome::Success(AdminToken)
+                        Outcome::Success(VWApi)
                     } else {
-                        Outcome::Error((Status::Unauthorized, "Invalid admin_key"))
+                        Outcome::Error((Status::Unauthorized, "Invalid x-vaultwarden-api"))
                     }
                 } else {
-                    Outcome::Error((Status::InternalServerError, "admin_key not configured"))
+                    Outcome::Error((Status::InternalServerError, "x-vaultwarden-api not configured"))
                 }
             }
-            _ => Outcome::Error((Status::Unauthorized, "Missing admin_key header"))
+            _ => Outcome::Error((Status::Unauthorized, "Missing x-vaultwarden-api header"))
         }
     }
 }
@@ -48,7 +48,7 @@ struct InviteData {
 }
 
 #[post("/invite", format = "application/json", data = "<data>")]
-async fn invite_user(_auth: AdminToken, data: Json<InviteData>, mut conn: DbConn) -> JsonResult {
+async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> JsonResult {
     let data: InviteData = data.into_inner();
     if let Some(existing_user) = User::find_by_mail(&data.email, &mut conn).await {
         return Ok(Json(existing_user.to_json(&mut conn).await))
@@ -81,7 +81,7 @@ struct UserResponse {
 }
 
 #[get("/user/<user_id>")]
-async fn get_user_by_id(_auth: AdminToken, user_id: String, mut conn: DbConn) -> JsonResult {
+async fn get_user_by_id(_auth: VWApi, user_id: String, mut conn: DbConn) -> JsonResult {
     let user_uuid = UserId::from(user_id);
 
     match User::find_by_uuid(&user_uuid, &mut conn).await {
