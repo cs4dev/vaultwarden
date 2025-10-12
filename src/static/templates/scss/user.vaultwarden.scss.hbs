@@ -1,3 +1,11 @@
+html.theme_light {
+  --strongkeep-logo: url(../custom/strongkeep-logo.png);
+}
+
+html.theme_dark {
+  --strongkeep-logo: url(../custom/strongkeep-logo-dark.png);
+}
+
 /* Hide `Authenticator app` 2FA */
 .providers-2fa-0 {
   @extend %vw-hide;
@@ -27,7 +35,7 @@
 
 /* Use a custom login logo */
 app-root img.new-logo-themed {
-	content: url(../custom/strongkeep-logo.png) !important;
+	content: var(--strongkeep-logo) !important;
 }
 
 /* Use a custom top left logo on login and locked screen page */
@@ -39,7 +47,7 @@ auth-anon-layout > main > a > bit-icon::before {
   content: "" !important;
   width: 175px !important;
   height: 36px !important;
-  background-image: url(../custom/strongkeep-logo.png) !important;
+  background-image: var(--strongkeep-logo) !important;
   background-repeat: no-repeat !important;
   background-size: contain;
 }
@@ -58,14 +66,14 @@ app-organization-layout bit-nav-logo bit-icon::before {
   background-size: contain;
 }
 app-user-layout bit-nav-logo bit-icon::before {
-  background-image: url(../custom/logo.png) !important;
+  background-image: url(../custom/strongkeep-logo-dark.png) !important;
 }
 app-user-layout #bit-side-nav.tw-w-60 bit-nav-logo bit-icon::before {
-  background-image: url(../custom/strongkeep-logo.png) !important;
+  background-image: url(../custom/strongkeep-logo-dark.png) !important;
 }
 app-organization-layout bit-nav-logo bit-icon::before {
-  background-image: url(../custom/logo.png) !important;
+  background-image: var(--strongkeep-logo) !important;
 }
 app-organization-layout #bit-side-nav.tw-w-60 bit-nav-logo bit-icon::before {
-  background-image: url(../custom/strongkeep-logo-admin.png) !important;
+  background-image: var(--strongkeep-logo) !important;
 }

@@ -6,7 +6,6 @@ use crate::{
     api::{EmptyResult, JsonResult},
     db::{models::*, DbConn},
     mail, CONFIG,
-    auth::{encode_jwt, generate_invite_claims},
 };
 
 pub const FAKE_ADMIN_UUID: &str = "00000000-0000-0000-0000-000000000000";
@@ -38,7 +37,7 @@ impl<'r> FromRequest<'r> for VWApi {
 }
 
 pub fn routes() -> Vec<Route> {
-    routes![invite_user, get_user_by_id]
+    routes![invite_user, get_user_details, exposed]
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,11 +46,27 @@ struct InviteData {
     email: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InviteResponse {
+    user_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExposedData {
+    user_id: String,
+    org: std::collections::HashMap<String, i32>,
+    me: i32,
+}
+
 #[post("/invite", format = "application/json", data = "<data>")]
 async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> JsonResult {
     let data: InviteData = data.into_inner();
     if let Some(existing_user) = User::find_by_mail(&data.email, &mut conn).await {
-        return Ok(Json(existing_user.to_json(&mut conn).await))
+        return Ok(Json(serde_json::to_value(InviteResponse {
+            user_id: existing_user.uuid.to_string(),
+        }).unwrap()))
     }
 
     let mut user = User::new(data.email, None);
@@ -70,63 +85,115 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
     _generate_invite(&user, &mut conn).await.map_err(|e| e.with_code(Status::InternalServerError.code))?;
     user.save(&mut conn).await.map_err(|e| e.with_code(Status::InternalServerError.code))?;
 
-    Ok(Json(user.to_json(&mut conn).await))
+    Ok(Json(serde_json::to_value(InviteResponse {
+        user_id: user.uuid.to_string(),
+    }).unwrap()))
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UserResponse {
-    email: Option<String>,
-    url: Option<String>,
+struct UserDetailsResponse {
+    status: String,
+    members_count: i64,
+    exposed_count: i64,
+    last_updated_at: Option<String>,
 }
 
-#[get("/user/<user_id>")]
-async fn get_user_by_id(_auth: VWApi, user_id: String, mut conn: DbConn) -> JsonResult {
+#[get("/user/<user_id>/details")]
+async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> JsonResult {
     let user_uuid = UserId::from(user_id);
 
     match User::find_by_uuid(&user_uuid, &mut conn).await {
-        Some(user) => {
-            if user.akey.is_empty() {
-                let claims = generate_invite_claims(
-                    user.uuid.clone(),
-                    user.email.clone(),
-                    FAKE_ADMIN_UUID.to_string().into(),
-                    FAKE_ADMIN_UUID.to_string().into(),
-                    None,
-                );
-                let invite_token = encode_jwt(&claims);
-                let mut query = url::Url::parse("https://query.builder").unwrap();
-                {
-                    let mut query_params = query.query_pairs_mut();
-                    query_params
-                        .append_pair("email", &user.email)
-                        .append_pair("organizationName", &CONFIG.invitation_org_name())
-                        .append_pair("organizationId", &FAKE_ADMIN_UUID.to_string())
-                        .append_pair("organizationUserId", &FAKE_ADMIN_UUID.to_string())
-                        .append_pair("token", &invite_token);
+        Some(_user) => {
+            // Get user memberships to determine status
+            let memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
             
-                    if CONFIG.sso_enabled() && CONFIG.sso_only() {
-                        query_params.append_pair("orgUserHasExistingUser", "false");
-                    } else if user.private_key.is_some() {
-                        query_params.append_pair("orgUserHasExistingUser", "true");
-                    }
-                }
-                let Some(query_string) = query.query() else {
-                    err!("Failed to build invite URL query parameters")
-                };
-                let url = format!("{}/#/accept-organization/?{}", CONFIG.domain(), query_string);
-
-                Ok(Json(serde_json::to_value(UserResponse {
-                    email: Some(user.email),
-                    url: Some(url.clone()),
-                }).unwrap()))
+            // Status: Active if has membership, else Pending
+            let status = if memberships.is_empty() {
+                "Pending".to_string()
             } else {
-                Ok(Json(serde_json::to_value(UserResponse {
-                    email: Some(user.email),
-                    url: None,
-                }).unwrap()))
-            }
+                "Active".to_string()
+            };
+            
+            // Members count: number of members in the user's organization (0 if no organization)
+            let members_count = if let Some(membership) = memberships.first() {
+                let org_memberships = Membership::find_by_org(&membership.org_uuid, &mut conn).await;
+                org_memberships.len() as i64
+            } else {
+                0
+            };
+            
+            // Exposed count and last_updated_at: search reports by org_uuid (0 if no organization)
+            let (exposed_count, last_updated_at) = if let Some(membership) = memberships.first() {
+                match Report::find_by_org(&membership.org_uuid, &mut conn).await {
+                    Some(report) => (report.exposed_count, Some(report.last_updated_at.and_utc().to_rfc3339())),
+                    None => (0, None),
+                }
+            } else {
+                (0, None)
+            };
+
+            Ok(Json(serde_json::to_value(UserDetailsResponse {
+                status,
+                members_count,
+                exposed_count: exposed_count.into(),
+                last_updated_at,
+            }).unwrap()))
         }
         None => err_code!("User not found", Status::NotFound.code),
     }
+}
+
+#[post("/exposed", format = "application/json", data = "<data>")]
+async fn exposed(data: Json<ExposedData>, mut conn: DbConn) -> EmptyResult {
+    let data: ExposedData = data.into_inner();
+    let user_uuid = UserId::from(data.user_id);
+    
+    match User::find_by_uuid(&user_uuid, &mut conn).await {
+        Some(_) => {
+            // Get user's memberships once for efficiency
+            let user_memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
+            
+            // 1. Store personal exposed passwords (me field) - with userId, no org
+            match Report::find_by_user_personal(&user_uuid, &mut conn).await {
+                Some(mut existing_report) => {
+                    existing_report.update_exposed_count(data.me);
+                    existing_report.save(&mut conn).await?;
+                }
+                None => {
+                    let mut report = Report::new_personal(user_uuid.clone(), data.me);
+                    report.save(&mut conn).await?;
+                }
+            }
+            
+            // 2. Store organization-specific exposed passwords (no userId, only orgId)
+            for (org_id_str, exposed_count) in data.org {
+                let org_uuid = OrganizationId::from(org_id_str);
+                
+                // Verify user is member of this organization
+                let is_member = user_memberships
+                    .iter()
+                    .any(|membership| membership.org_uuid == org_uuid);
+                
+                if !is_member {
+                    continue; // Skip if user is not a member of this org
+                }
+                
+                // Find and update or create new report for this specific org (no userId stored)
+                match Report::find_by_org(&org_uuid, &mut conn).await {
+                    Some(mut existing_report) => {
+                        existing_report.update_exposed_count(exposed_count);
+                        existing_report.save(&mut conn).await?;
+                    }
+                    None => {
+                        let mut report = Report::new_org(org_uuid, exposed_count);
+                        report.save(&mut conn).await?;
+                    }
+                }
+            }
+        }
+        None => (),
+    }
+
+    Ok(())
 }

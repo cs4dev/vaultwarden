@@ -927,6 +927,24 @@ impl Cipher {
         }}
     }
 
+    pub async fn count_accessible_by_user(user_uuid: &UserId, conn: &mut DbConn) -> i64 {
+        db_run! {conn: {
+            ciphers::table
+                .filter(
+                    ciphers::organization_uuid.eq_any(
+                        users_organizations::table
+                            .select(users_organizations::org_uuid.nullable())
+                            .filter(users_organizations::user_uuid.eq(user_uuid))
+                    )
+                    .or(ciphers::user_uuid.eq(user_uuid))
+                )
+                .count()
+                .first::<i64>(conn)
+                .ok()
+                .unwrap_or(0)
+        }}
+    }
+
     pub async fn find_by_org(org_uuid: &OrganizationId, conn: &mut DbConn) -> Vec<Self> {
         db_run! {conn: {
             ciphers::table
