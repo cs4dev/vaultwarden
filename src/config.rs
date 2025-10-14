@@ -486,8 +486,6 @@ make_config! {
 
         /// HIBP Api Key |> HaveIBeenPwned API Key, request it here: https://haveibeenpwned.com/API/Key
         hibp_api_key:           Pass,   true,   option;
-        /// StrongKeep API Key |> API key for accessing StrongKeep custom endpoints
-        strongkeep_api_key:     Pass,   true,   option;
 
         /// Per-user attachment storage limit (KB) |> Max kilobytes of attachment storage allowed per user. When this limit is reached, the user will not be allowed to upload further attachments.
         user_attachment_limit:  i64,    true,   option;
@@ -531,6 +529,8 @@ make_config! {
         org_creation_users:     String, true,   def,    String::new();
         /// Allow invitations |> Controls whether users can be invited by organization admins, even when signups are otherwise disabled
         invitations_allowed:    bool,   true,   def,    true;
+        /// Disable organization deletion |> Controls whether organization owners can delete their organizations. This setting applies globally to all organizations.
+        disable_org_deletion:   bool,   true,   def,    false;
         /// Invitation token expiration time (in hours) |> The number of hours after which an organization invite token, emergency access invite token,
         /// email verification token and deletion request token will expire (must be at least 1)
         invitation_expiration_hours: u32, false, def, 120;
@@ -1135,7 +1135,7 @@ fn validate_config(cfg: &ConfigItems) -> Result<(), Error> {
     }
 
     if !cfg.disable_admin_token {
-        match cfg.x_vaultwarden_api.as_ref() {
+        match cfg.admin_token.as_ref() {
             Some(t) if t.starts_with("$argon2") => {
                 if let Err(e) = argon2::password_hash::PasswordHash::new(t) {
                     err!(format!("The configured Argon2 PHC in `ADMIN_TOKEN` is invalid: '{e}'"))
@@ -1536,7 +1536,7 @@ impl Config {
 
     /// Tests whether the admin token is set to a non-empty value.
     pub fn is_admin_token_set(&self) -> bool {
-        let token = self.x_vaultwarden_api();
+        let token = self.admin_token();
 
         token.is_some() && !token.unwrap().trim().is_empty()
     }

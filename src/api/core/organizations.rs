@@ -217,6 +217,9 @@ async fn delete_organization(
     headers: OwnerHeaders,
     mut conn: DbConn,
 ) -> EmptyResult {
+    if CONFIG.disable_org_deletion() {
+        err!("Organization deletion is disabled by the server administrator");
+    }
     if org_id != headers.org_id {
         err!("Organization not found", "Organization id's do not match");
     }
