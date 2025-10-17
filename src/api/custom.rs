@@ -94,6 +94,7 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
 #[serde(rename_all = "camelCase")]
 struct UserDetailsResponse {
     status: String,
+    org_id: Option<String>,
     members_count: i64,
     exposed_count: i64,
     last_updated_at: Option<String>,
@@ -133,8 +134,11 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                 (0, None)
             };
 
+            let org_id = memberships.first().map(|m| m.org_uuid.to_string());
+
             Ok(Json(serde_json::to_value(UserDetailsResponse {
                 status,
+                org_id,
                 members_count,
                 exposed_count: exposed_count.into(),
                 last_updated_at,
